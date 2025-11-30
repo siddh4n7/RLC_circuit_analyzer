@@ -1,2 +1,58 @@
 # RLC_circuit_analyzer
-A web-based tool for analyzing RC, RL, and RLC series circuits. Users can input component values and instantly calculate impedance, time constants, and resonance. Built with HTML, CSS, and JavaScript, the app provides an easy way to explore circuit behavior for learning and quick reference.
+
+---
+
+## ▶️ How to Use
+
+1. Clone or download the project.
+2. Open **index.html** in your browser.
+3. Choose a circuit mode (RC, RL, or RLC).
+4. Enter your component values.
+5. Click **Calculate** to view the results.
+
+---
+
+## 📘 Example Calculations
+
+- **RC Time Constant:**  
+  τ = R × C
+
+- **RL Time Constant:**  
+  τ = L / R
+
+- **Resonant Frequency (RLC):**  
+  \( f = \frac{1}{2\pi\sqrt{LC}} \)
+
+- **Impedance (RLC in series):**  
+  \( Z = \sqrt{R^2 + (X_L - X_C)^2} \)
+
+---
+
+## 📈 Future Improvements
+
+- Frequency response graphing  
+- Parallel RC/RL/RLC circuits  
+- Export results (CSV/PDF)  
+- Dark mode UI  
+- Real-time data visualization  
+
+---
+
+## 🤝 Contributions
+
+Pull requests and suggestions are welcome!  
+If you find any issues, feel free to open an **Issue**.
+
+---
+
+## 📄 License
+
+This project is released under the **MIT License**.  
+You are free to use, modify, and distribute it.
+
+---
+
+## ✨ Author
+
+Created by siddh4n7  
+Open for collaboration and improvements!
