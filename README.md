@@ -5,7 +5,7 @@
 ## ▶️ How to Use
 
 1. Clone or download the project.
-2. Open **index.html** in your browser.
+2. Open **RLC_ckt_analyzer.html** in your browser.
 3. Choose a circuit mode (RC, RL, or RLC).
 4. Enter your component values.
 5. Click **Calculate** to view the results.
@@ -54,5 +54,5 @@ You are free to use, modify, and distribute it.
 
 ## ✨ Author
 
-Created by siddh4n7  
+Created by **siddh4n7**  
 Open for collaboration and improvements!
