@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detailed Transient Circuit Analyzer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.6.4/math.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary-blue': '#1e40af',
+                        'secondary-green': '#059669',
+                        'accent-red': '#dc2626',
+                        'graph-primary': '#4f46e5', /* Indigo */
+                        'graph-current': '#ef4444', /* Red */
+                        'graph-voltage': '#22c55e', /* Green */
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .canvas-container { height: 400px; }
+        .canvas-container canvas { border: 1px solid #d1d5db; background-color: #ffffff; }
+        
+        .formula-block {
+            background-color: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 0.5rem 1rem;
+            margin: 1rem 0;
+            font-size: 1.1rem;
+            color: #1e40af;
+        }
+        .damping-block { padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; }
+        .damping-over { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        .damping-crit { background-color: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
+        .damping-under { background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .tab-button.active {
+            background-color: #1e40af;
+            color: white;
+            border-bottom-color: #1e40af;
+        }
+        .input-group-label {
+             font-weight: 600;
+             margin-top: 1rem;
+             margin-bottom: 0.5rem;
+             padding-top: 0.5rem;
+             border-top: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+
+    <h1 class="text-3xl font-extrabold text-primary-blue mb-6">Detailed Circuit Analyzer (Transient DC & Steady-State AC)</h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- 1. Configuration Panel -->
+        <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-2xl h-fit">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Circuit Configuration</h2>
+            
+            <!-- Source Type Selector -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Source Type:</label>
+                <select id="sourceType" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2 font-semibold">
+                    <option value="DC">DC (Transient Analysis)</option>
+                    <option value="AC">AC (Steady-State Analysis)</option>
+                </select>
+            </div>
+
+            <!-- Circuit Type Selector -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Series Circuit Type:</label>
+                <select id="circuitType" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2 font-semibold">
+                    <option value="RC">RC Series</option>
+                    <option value="RL">RL Series</option>
+                    <option value="RLC">RLC Series</option>
+                </select>
+            </div>
+
+            <!-- Input Fields -->
+            <div id="inputForm" class="space-y-4">
+                
+                <h3 class="input-group-label text-gray-700">Source Parameters</h3>
+                
+                <!-- DC Inputs (Visible by default) -->
+                <div id="dcInputs" class="space-y-4">
+                    <label class="block">
+                        <span class="text-sm font-medium text-gray-700">DC Voltage Source ($V_{DC}$, Volts):</span>
+                        <input type="number" id="inputV_DC" value="10" min="0" step="0.1" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2">
+                    </label>
+                </div>
+
+                <!-- AC Inputs (Hidden by default) -->
+                <div id="acInputs" class="space-y-4 hidden">
+                    <label class="block">
+                        <span class="text-sm font-medium text-gray-700">AC Voltage Magnitude ($V_{peak}$, Volts):</span>
+                        <input type="number" id="inputV_AC" value="10" min="0" step="0.1" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2">
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-medium text-gray-700">Frequency ($f$, Hertz):</span>
+                        <input type="number" id="inputF" value="60" min="0.1" step="0.1" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2">
+                    </label>
+                </div>
+
+                <h3 class="input-group-label text-gray-700">Component Values</h3>
+                
+                <label class="block">
+                    <span class="text-sm font-medium text-gray-700">Resistor ($R$, Ohms):</span>
+                    <input type="number" id="inputR" value="100" min="1" step="1" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2">
+                </label>
+                
+                <!-- Capacitor Input -->
+                <div id="inputCContainer">
+                    <label class="block">
+                        <span class="text-sm font-medium text-gray-700">Capacitor ($C$, Farads):</span>
+                        <input type="number" id="inputC" value="0.0001" min="1e-9" step="any" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2">
+                    </label>
+                </div>
+                
+                <!-- Inductor Input -->
+                <div id="inputLContainer" class="hidden">
+                    <label class="block">
+                        <span class="text-sm font-medium text-gray-700">Inductor ($L$, Henrys):</span>
+                        <input type="number" id="inputL" value="0.001" min="1e-9" step="any" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-blue focus:ring-primary-blue p-2">
+                    </label>
+                </div>
+            </div>
+            
+            <button id="runAnalysisBtn" class="mt-6 w-full bg-primary-blue hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-lg shadow-xl transition transform hover:scale-[1.01]">
+                Run Detailed Analysis
+            </button>
+        </div>
+
+        <!-- 2. Analysis & Equations Panel -->
+        <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-2xl">
+            <h2 class="text-xl font-bold text-gray-800 mb-4" id="analysisTitle">DC Transient Analysis Summary</h2>
+            <div id="analysisArea" class="space-y-4 text-gray-700">
+                <div id="summaryOutput" class="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                    <p class="text-sm">Configure the circuit and click "Run Detailed Analysis" to see the results here.</p>
+                </div>
+                
+                <h3 class="text-lg font-semibold text-primary-blue mt-4">Equations / Time-Domain Responses</h3>
+                <div id="equationOutput" class="text-sm">
+                    <!-- Dynamic equations for V_R(t), V_L(t), V_C(t), I(t) -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 3. Graph Area -->
+    <div class="mt-6 bg-white p-6 rounded-xl shadow-2xl">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">Element Responses ($V$ vs. $t$ and $I$ vs. $t$)</h2>
+        
+        <!-- Tab Navigation -->
+        <div id="tabNav" class="flex flex-wrap border-b border-gray-200 mb-4">
+        </div>
+
+        <!-- Tab Content / Graph Container -->
+        <div id="graphViews" class="canvas-container relative">
+            <canvas id="graphCanvas"></canvas>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- Global Constants and Configuration ---
+        const COLORS = {
+            V: '#22c55e', /* Green */
+            I: '#ef4444'  /* Red */
+        };
+        let analysisResults = { time: [], VC: [], VR: [], VL: [], I: [] };
+        let currentGraphType = 'VR';
+        
+        // --- HTML Elements ---
+        const sourceTypeSelect = document.getElementById('sourceType');
+        const circuitTypeSelect = document.getElementById('circuitType');
+        const runAnalysisBtn = document.getElementById('runAnalysisBtn');
+        const inputV_DC = document.getElementById('inputV_DC');
+        const inputV_AC = document.getElementById('inputV_AC');
+        const inputF = document.getElementById('inputF');
+        const dcInputs = document.getElementById('dcInputs');
+        const acInputs = document.getElementById('acInputs');
+        const inputR = document.getElementById('inputR');
+        const inputC = document.getElementById('inputC');
+        const inputL = document.getElementById('inputL');
+        const inputCContainer = document.getElementById('inputCContainer');
+        const inputLContainer = document.getElementById('inputLContainer');
+        const summaryOutput = document.getElementById('summaryOutput');
+        const equationOutput = document.getElementById('equationOutput');
+        const analysisTitle = document.getElementById('analysisTitle');
+        const tabNav = document.getElementById('tabNav');
+        const graphCanvas = document.getElementById('graphCanvas');
+        const graphCtx = graphCanvas.getContext('2d');
+
+        // --- Configuration & Event Listeners ---
+
+        function updateInputs() {
+            const circuitType = circuitTypeSelect.value;
+            const sourceType = sourceTypeSelect.value;
+
+            // 1. Component Visibility
+            inputCContainer.classList.add('hidden');
+            inputLContainer.classList.add('hidden');
+
+            if (circuitType.includes('C')) { inputCContainer.classList.remove('hidden'); }
+            if (circuitType.includes('L')) { inputLContainer.classList.remove('hidden'); }
+
+            // 2. Source Input Visibility
+            if (sourceType === 'DC') {
+                dcInputs.classList.remove('hidden');
+                acInputs.classList.add('hidden');
+            } else {
+                dcInputs.classList.add('hidden');
+                acInputs.classList.remove('hidden');
+            }
+            
+            // 3. Update Title
+            analysisTitle.textContent = sourceType === 'DC' 
+                ? 'DC Transient Analysis Summary' 
+                : 'AC Steady-State Analysis Summary';
+
+            // Reset analysis results display
+            summaryOutput.innerHTML = '<p class="text-sm">Configure the circuit and click "Run Detailed Analysis" to see the results here.</p>';
+            equationOutput.innerHTML = '';
+            drawPlaceholder();
+        }
+
+        function createTabs(elements) {
+            tabNav.innerHTML = '';
+            const graphTypes = [];
+            
+            // Determine which elements are in the circuit
+            if (elements.includes('R')) {
+                graphTypes.push({ id: 'VR', label: 'R Voltage ($V_R$)' });
+                graphTypes.push({ id: 'IR', label: 'R Current ($I_R$)' });
+            }
+            if (elements.includes('C')) {
+                graphTypes.push({ id: 'VC', label: 'C Voltage ($V_C$)' });
+                graphTypes.push({ id: 'IC', label: 'C Current ($I_C$)' });
+            }
+            if (elements.includes('L')) {
+                graphTypes.push({ id: 'VL', label: 'L Voltage ($V_L$)' });
+                graphTypes.push({ id: 'IL', label: 'L Current ($I_L$)' });
+            }
+
+            graphTypes.forEach(type => {
+                const button = document.createElement('button');
+                button.textContent = type.label;
+                button.id = type.id;
+                button.className = `tab-button px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-b-0 border-transparent hover:bg-gray-100 transition duration-150 ease-in-out rounded-t-lg`;
+                button.addEventListener('click', () => switchGraph(type.id));
+                tabNav.appendChild(button);
+            });
+
+            // Set the initial active tab
+            currentGraphType = graphTypes.length > 0 ? graphTypes[0].id : '';
+            if (currentGraphType && document.getElementById(currentGraphType)) {
+                document.getElementById(currentGraphType).classList.add('active');
+            } else {
+                drawPlaceholder();
+            }
+        }
+
+        function switchGraph(newType) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            const newBtn = document.getElementById(newType);
+            if (newBtn) {
+                newBtn.classList.add('active');
+                currentGraphType = newType;
+                drawGraph(analysisResults, currentGraphType);
+            }
+        }
+
+        sourceTypeSelect.addEventListener('change', updateInputs);
+        circuitTypeSelect.addEventListener('change', updateInputs);
+        runAnalysisBtn.addEventListener('click', runAnalysis);
+        
+        // Initial setup and resize handling
+        window.addEventListener('load', () => {
+            updateInputs();
+            graphCanvas.width = graphCanvas.offsetWidth;
+            graphCanvas.height = graphCanvas.offsetHeight;
+            drawPlaceholder();
+        });
+        window.addEventListener('resize', () => {
+             graphCanvas.width = graphCanvas.offsetWidth;
+             graphCanvas.height = graphCanvas.offsetHeight;
+             if (analysisResults.time.length > 0) {
+                drawGraph(analysisResults, currentGraphType);
+             } else {
+                drawPlaceholder();
+             }
+        });
+
+
+        // --- Transient Analysis Core Logic (DC) ---
+        function runDCAnalysis(V, R, C_val, L_val, circuitType, elements) {
+            
+            let I_fn, VC_fn, VR_fn, VL_fn;
+            let maxTime = 0;
+            let summaryHTML = '';
+            let equationHTML = '';
+            const numPoints = 200;
+
+            // --- RC Circuit ---
+            if (circuitType === 'RC') {
+                const C = C_val;
+                const tau = R * C;
+                maxTime = 5 * tau;
+                
+                I_fn = (t) => (V / R) * Math.exp(-t / tau);
+                VC_fn = (t) => V * (1 - Math.exp(-t / tau));
+                VR_fn = (t) => V * Math.exp(-t / tau);
+                VL_fn = (t) => 0; 
+                
+                equationHTML = `
+                    <p class="text-md font-semibold text-gray-700 mt-2">Capacitor Voltage ($V_C$):</p>
+                    <div class="formula-block">$$V_C(t) = V \\left(1 - e^{-t/RC}\\right)$$</div>
+                    <p class="text-md font-semibold text-gray-700 mt-2">Resistor Voltage ($V_R$):</p>
+                    <div class="formula-block">$$V_R(t) = V e^{-t/RC}$$</div>
+                    <p class="text-md font-semibold text-gray-700 mt-2">Loop Current ($I$):</p>
+                    <div class="formula-block">$$I(t) = \\frac{V}{R} e^{-t/RC}$$</div>
+                `;
+
+                summaryHTML = `
+                    <p class="text-lg font-bold text-secondary-green mb-2">RC Series Transient Analysis</p>
+                    <p>Resistance ($R$): <span class="font-semibold">${R} &Omega;</span> | Capacitance ($C$): <span class="font-semibold">${C} F</span></p>
+                    <p class="mt-3">The **Time Constant** ($\\tau$) is:</p>
+                    <div class="formula-block">
+                         $$\\tau = RC = ${tau.toPrecision(4)} \\text{ seconds}$$
+                    </div>
+                `;
+            } 
+            // --- RL Circuit ---
+            else if (circuitType === 'RL') {
+                const L = L_val;
+                const tau = L / R;
+                const finalCurrent = V / R;
+                maxTime = 5 * tau;
+
+                I_fn = (t) => finalCurrent * (1 - Math.exp(-t / tau));
+                VR_fn = (t) => V * (1 - Math.exp(-t / tau));
+                VL_fn = (t) => V * Math.exp(-t / tau);
+                VC_fn = (t) => 0; 
+                
+                equationHTML = `
+                    <p class="text-md font-semibold text-gray-700 mt-2">Inductor Voltage ($V_L$):</p>
+                    <div class="formula-block">$$V_L(t) = V e^{-t/(L/R)}$$</div>
+                    <p class="text-md font-semibold text-gray-700 mt-2">Resistor Voltage ($V_R$):</p>
+                    <div class="formula-block">$$V_R(t) = V \\left(1 - e^{-t/(L/R)}\\right)$$</div>
+                    <p class="text-md font-semibold text-gray-700 mt-2">Loop Current ($I$):</p>
+                    <div class="formula-block">$$I(t) = \\frac{V}{R} \\left(1 - e^{-t/(L/R)}\\right)$$</div>
+                `;
+
+                summaryHTML = `
+                    <p class="text-lg font-bold text-secondary-green mb-2">RL Series Transient Analysis</p>
+                    <p>Resistance ($R$): <span class="font-semibold">${R} &Omega;</span> | Inductance ($L$): <span class="font-semibold">${L} H</span></p>
+                    <p class="mt-3">The **Time Constant** ($\\tau$) is:</p>
+                    <div class="formula-block">
+                         $$\\tau = \\frac{L}{R} = ${tau.toPrecision(4)} \\text{ seconds}$$
+                    </div>
+                `;
+            }
+            // --- RLC Circuit ---
+            else if (circuitType === 'RLC') {
+                const L = L_val;
+                const C = C_val;
+
+                const alpha = R / (2 * L);
+                const omega0 = 1 / Math.sqrt(L * C);
+                
+                let dampingCase = '';
+
+                if (alpha > omega0) {
+                    // Overdamped
+                    const beta = Math.sqrt(alpha * alpha - omega0 * omega0);
+                    maxTime = 10 / (alpha - beta);
+                    dampingCase = `<div class="damping-block damping-over">Case: Overdamped ($\\alpha > \\omega_0$)</div>`;
+                    
+                    I_fn = (t) => (V / (L * beta)) * Math.exp(-alpha * t) * Math.sinh(beta * t);
+
+                    // Analytic formula for Vc(t) in Overdamped RLC with Vc(0)=0, I(0)=0
+                    VC_fn = (t) => {
+                         const s1 = -alpha + beta;
+                         const s2 = -alpha - beta;
+                         return V * (1 + (s2 / (s1 - s2)) * Math.exp(s1 * t) + (s1 / (s2 - s1)) * Math.exp(s2 * t));
+                    };
+                    
+                    equationHTML = `
+                        <p class="text-md font-semibold text-gray-700 mt-2">Loop Current ($I$):</p>
+                        <div class="formula-block">$$I(t) = \\frac{V}{L\\beta} e^{-\\alpha t} \\sinh(\\beta t)$$</div>
+                    `;
+
+                } else if (Math.abs(alpha - omega0) < 1e-4) {
+                    // Critically Damped
+                    maxTime = 50 / alpha;
+                    dampingCase = `<div class="damping-block damping-crit">Case: Critically Damped ($\\alpha = \\omega_0$)</div>`;
+                    
+                    I_fn = (t) => (V / L) * t * Math.exp(-alpha * t);
+                    
+                    // Analytic formula for VC(t) in Critically Damped RLC
+                    VC_fn = (t) => V * (1 - (1 + alpha * t) * Math.exp(-alpha * t));
+
+                    equationHTML = `
+                        <p class="text-md font-semibold text-gray-700 mt-2">Loop Current ($I$):</p>
+                        <div class="formula-block">$$I(t) = \\frac{V}{L} t e^{-\\alpha t}$$</div>
+                    `;
+
+                } else {
+                    // Underdamped
+                    const omega_d = Math.sqrt(omega0 * omega0 - alpha * alpha);
+                    maxTime = 10 * (2 * Math.PI / omega_d);
+                    dampingCase = `<div class="damping-block damping-under">Case: Underdamped ($\\alpha < \\omega_0$)</div>`;
+
+                    I_fn = (t) => (V / (L * omega_d)) * Math.exp(-alpha * t) * Math.sin(omega_d * t);
+                    
+                    // Analytic formula for VC(t) in Underdamped RLC
+                    VC_fn = (t) => V * (1 - Math.exp(-alpha * t) * (Math.cos(omega_d * t) + (alpha / omega_d) * Math.sin(omega_d * t)));
+
+                    equationHTML = `
+                        <p class="text-md font-semibold text-gray-700 mt-2">Loop Current ($I$):</p>
+                        <div class="formula-block">$$I(t) = \\frac{V}{L\\omega_d} e^{-\\alpha t} \\sin(\\omega_d t)$$</div>
+                    `;
+                }
+
+                // General Voltage solutions derived from I(t)
+                VR_fn = (t) => R * I_fn(t);
+                
+                // Inductor Voltage (KVL: VL = V - VR - VC)
+                VL_fn = (t) => V - VR_fn(t) - VC_fn(t);
+
+                // Add RLC specific analytic voltage equations for display
+                equationHTML = `
+                    <p class="text-md font-semibold text-gray-700 mt-2">Capacitor Voltage ($V_C$):</p>
+                    <div class="formula-block">$$V_C(t) = V \\left[1 - e^{-\\alpha t} (A \\cos(\\omega_d t) + B \\sin(\\omega_d t))\\right] \\text{ (Underdamped Example)}$$</div>
+                    <p class="text-md font-semibold text-gray-700 mt-2">Resistor Voltage ($V_R$):</p>
+                    <div class="formula-block">$$V_R(t) = I(t) R$$</div>
+                    <p class="text-md font-semibold text-gray-700 mt-2">Inductor Voltage ($V_L$):</p>
+                    <div class="formula-block">$$V_L(t) = V - V_R(t) - V_C(t)$$</div>
+                    ${equationHTML}
+                `;
+                
+                summaryHTML = `
+                    <p class="text-lg font-bold text-secondary-green mb-2">RLC Series Transient Analysis</p>
+                    <p>Resistance ($R$): <span class="font-semibold">${R} &Omega;</span> | Inductance ($L$): <span class="font-semibold">${L} H</span> | Capacitance ($C$): <span class="font-semibold">${C} F</span></p>
+                    <p class="mt-3">The **Damping Parameters** are:</p>
+                    <div class="formula-block">
+                         $$\\alpha = \\frac{R}{2L} = ${alpha.toPrecision(4)} \\text{ Np/s}$$
+                         $$\\omega_0 = \\frac{1}{\\sqrt{LC}} = ${omega0.toPrecision(4)} \\text{ rad/s}$$
+                    </div>
+                    ${dampingCase}
+                    <p class="text-sm italic text-gray-500 mt-3">The circuit response is determined by the relationship between $\\alpha$ and $\\omega_0$. Initial conditions: $V_C(0)=0$ and $I(0)=0$.</p>
+                `;
+            }
+
+            // Numerical Simulation
+            let timeData = [];
+            let VCData = [];
+            let VRData = [];
+            let VLData = [];
+            let IData = [];
+            
+            for (let i = 0; i <= numPoints; i++) {
+                const t = i * maxTime / numPoints;
+                
+                timeData.push(t);
+                IData.push(I_fn(t));
+                VRData.push(VR_fn(t));
+                VCData.push(VC_fn(t));
+                VLData.push(VL_fn(t));
+            }
+            
+            return {
+                results: { time: timeData, VC: VCData, VR: VRData, VL: VLData, I: IData },
+                summary: summaryHTML,
+                equations: equationHTML
+            };
+        }
+
+        // --- Steady-State Analysis Core Logic (AC) ---
+        function runACAnalysis(V_peak, R, C_val, L_val, F, circuitType, elements) {
+            
+            const omega = 2 * Math.PI * F;
+            let summaryHTML = '';
+            let equationHTML = '';
+            
+            // Calculate Reactances (Impedances)
+            let Z_R = math.complex(R, 0);
+            let Z_L = L_val > 0 ? math.complex(0, omega * L_val) : math.complex(0, 0);
+            let Z_C = C_val > 0 ? math.divide(math.complex(0, -1), math.complex(0, omega * C_val)) : math.complex(0, 0);
+            
+            // Total Impedance Z_total
+            let Z_total = Z_R;
+            if (elements.includes('L')) { Z_total = math.add(Z_total, Z_L); }
+            if (elements.includes('C')) { Z_total = math.add(Z_total, Z_C); }
+
+            const Z_mag = math.abs(Z_total);
+            const Z_phase = math.arg(Z_total); // Phase angle (radians)
+
+            // Current phasor I_peak
+            const V_source = math.complex(V_peak, 0); // Assume voltage source at 0 phase
+            const I_peak = math.divide(V_source, Z_total);
+            
+            const I_mag = math.abs(I_peak);
+            const I_phase = math.arg(I_peak);
+
+            // Component Voltage phasors (V = I * Z)
+            const V_R_phasor = math.multiply(I_peak, Z_R);
+            const V_L_phasor = math.multiply(I_peak, Z_L);
+            const V_C_phasor = math.multiply(I_peak, Z_C);
+            
+            const V_R_mag = math.abs(V_R_phasor);
+            const V_L_mag = math.abs(V_L_phasor);
+            const V_C_mag = math.abs(V_C_phasor);
+            
+            const V_R_phase = math.arg(V_R_phasor);
+            const V_L_phase = math.arg(V_L_phasor);
+            const V_C_phase = math.arg(V_C_phasor);
+            
+            // --- Summary and Equations Output ---
+            
+            equationHTML = `
+                <p class="text-md font-semibold text-gray-700 mt-2">Impedance Calculations:</p>
+                ${elements.includes('C') ? `<div class="formula-block">$$X_C = \\frac{1}{\\omega C} = \\frac{1}{2\\pi f C}$$</div>` : ''}
+                ${elements.includes('L') ? `<div class="formula-block">$$X_L = \\omega L = 2\\pi f L$$</div>` : ''}
+                <div class="formula-block">$$Z_{total} = R + j(X_L - X_C)$$</div>
+                
+                <p class="text-md font-semibold text-gray-700 mt-2">Current and Component Voltages (Time Domain):</p>
+                <div class="formula-block">$$i(t) = I_{peak} \\cos(\\omega t + \\phi_I)$$</div>
+                <div class="formula-block">$$v_R(t) = V_{R,peak} \\cos(\\omega t + \\phi_{V_R})$$</div>
+                ${elements.includes('C') ? `<div class="formula-block">$$v_C(t) = V_{C,peak} \\cos(\\omega t + \\phi_{V_C})$$</div>` : ''}
+                ${elements.includes('L') ? `<div class="formula-block">$$v_L(t) = V_{L,peak} \\cos(\\omega t + \\phi_{V_L})$$</div>` : ''}
+            `;
+            
+            summaryHTML = `
+                <p class="text-lg font-bold text-secondary-green mb-2">${circuitType} AC Steady-State Analysis</p>
+                <p>Source ($V_{peak}$): <span class="font-semibold">${V_peak} V</span> | Frequency ($f$): <span class="font-semibold">${F} Hz</span></p>
+                <p class="mt-3 font-bold">Circuit Response:</p>
+                <p>Total Impedance ($|Z|$): <span class="font-semibold text-primary-blue">${Z_mag.toPrecision(4)} &Omega;</span> | Phase Angle ($\phi$): <span class="font-semibold text-primary-blue">${(Z_phase * 180 / Math.PI).toPrecision(3)} &deg;</span></p>
+                <p>Peak Current ($I_{peak}$): <span class="font-semibold text-accent-red">${I_mag.toPrecision(4)} A</span> | Current Phase: <span class="font-semibold text-accent-red">${(I_phase * 180 / Math.PI).toPrecision(3)} &deg;</span></p>
+                
+                <p class="mt-3 font-bold">Component Peak Voltages:</p>
+                <p>Resistor ($V_{R,peak}$): <span class="font-semibold">${V_R_mag.toPrecision(4)} V</span> | Phase: ${(V_R_phase * 180 / Math.PI).toPrecision(3)} &deg;</p>
+                ${elements.includes('C') ? `<p>Capacitor ($V_{C,peak}$): <span class="font-semibold">${V_C_mag.toPrecision(4)} V</span> | Phase: ${(V_C_phase * 180 / Math.PI).toPrecision(3)} &deg;</p>` : ''}
+                ${elements.includes('L') ? `<p>Inductor ($V_{L,peak}$): <span class="font-semibold">${V_L_mag.toPrecision(4)} V</span> | Phase: ${(V_L_phase * 180 / Math.PI).toPrecision(3)} &deg;</p>` : ''}
+            `;
+            
+            // --- Numerical Simulation (Plotting Sinusoids) ---
+            
+            // Plot 5 periods
+            const period = 1 / F;
+            const maxTime = 5 * period;
+            const numPoints = 300; 
+
+            let timeData = [];
+            let VCData = [];
+            let VRData = [];
+            let VLData = [];
+            let IData = [];
+
+            for (let i = 0; i <= numPoints; i++) {
+                const t = i * maxTime / numPoints;
+                
+                timeData.push(t);
+                
+                // Sinusoidal functions (using Cosine convention for analysis): v(t) = V_peak * cos(wt + phase)
+                IData.push(I_mag * Math.cos(omega * t + I_phase));
+                VRData.push(V_R_mag * Math.cos(omega * t + V_R_phase));
+                VCData.push(V_C_mag * Math.cos(omega * t + V_C_phase));
+                VLData.push(V_L_mag * Math.cos(omega * t + V_L_phase));
+            }
+            
+            return {
+                results: { time: timeData, VC: VCData, VR: VRData, VL: VLData, I: IData },
+                summary: summaryHTML,
+                equations: equationHTML
+            };
+        }
+
+
+        // --- Main Analysis Dispatcher ---
+
+        function runAnalysis() {
+            const sourceType = sourceTypeSelect.value;
+            const circuitType = circuitTypeSelect.value;
+            const R = parseFloat(inputR.value);
+            const C_val = parseFloat(inputC.value);
+            const L_val = parseFloat(inputL.value);
+            
+            let elements = ['R'];
+            if (circuitType.includes('C')) { elements.push('C'); }
+            if (circuitType.includes('L')) { elements.push('L'); }
+            
+            let V, V_peak, F;
+
+            // 1. Input Validation
+            let requiredInputs = [R];
+            if (sourceType === 'DC') {
+                V = parseFloat(inputV_DC.value);
+                requiredInputs.push(V);
+            } else {
+                V_peak = parseFloat(inputV_AC.value);
+                F = parseFloat(inputF.value);
+                requiredInputs.push(V_peak, F);
+            }
+
+            if (circuitType.includes('C')) { requiredInputs.push(C_val); }
+            if (circuitType.includes('L')) { requiredInputs.push(L_val); }
+
+            if (requiredInputs.some(val => val < 0 || isNaN(val))) {
+                console.error('Input Error: Please enter valid positive values for all visible parameters.');
+                summaryOutput.innerHTML = '<p class="text-sm text-accent-red font-bold">Input Error: Please enter valid positive numbers for all visible component and source values.</p>';
+                equationOutput.innerHTML = '';
+                drawPlaceholder();
+                return;
+            }
+            if (sourceType === 'DC' && V === 0) {
+                 // Zero source is valid for discharge analysis, but here we assume charging/switching on.
+                 // For DC, enforce V > 0 for a meaningful graph, or show a flat line otherwise.
+            }
+            if (sourceType === 'AC' && F === 0) {
+                console.error('Input Error: Frequency (f) must be greater than zero for AC analysis.');
+                summaryOutput.innerHTML = '<p class="text-sm text-accent-red font-bold">Input Error: Frequency (f) must be greater than zero for AC analysis.</p>';
+                equationOutput.innerHTML = '';
+                drawPlaceholder();
+                return;
+            }
+
+            // 2. Run appropriate analysis
+            let analysisResult;
+            if (sourceType === 'DC') {
+                analysisResult = runDCAnalysis(V, R, C_val, L_val, circuitType, elements);
+            } else {
+                analysisResult = runACAnalysis(V_peak, R, C_val, L_val, F, circuitType, elements);
+            }
+
+            // 3. Update UI
+            analysisResults = analysisResult.results;
+            summaryOutput.innerHTML = analysisResult.summary;
+            equationOutput.innerHTML = analysisResult.equations;
+            
+            createTabs(elements); // Recreate tabs based on circuit components
+            
+            // 4. Draw graph
+            if (!document.getElementById(currentGraphType) && elements.length > 0) {
+                 // If the previously active tab doesn't exist in the new circuit, default to VR
+                 currentGraphType = 'VR';
+            }
+            switchGraph(currentGraphType);
+            
+            // Re-render LaTeX equations after updating content
+            if (window.MathJax) {
+                 MathJax.typesetPromise();
+            }
+        }
+
+        // --- Graphing Logic (Unchanged from previous version) ---
+
+        function drawPlaceholder() {
+            graphCanvas.width = graphCanvas.offsetWidth;
+            graphCanvas.height = graphCanvas.offsetHeight;
+            graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+            graphCtx.fillStyle = '#9ca3af';
+            graphCtx.font = '18px Inter';
+            graphCtx.textAlign = 'center';
+            graphCtx.fillText('Select circuit type, input values, and run analysis to view graphs.', graphCanvas.width / 2, graphCanvas.height / 2);
+        }
+
+        function drawGraph(results, type) {
+            const { time, VC, VR, VL, I } = results;
+            if (time.length === 0) return drawPlaceholder();
+
+            graphCanvas.width = graphCanvas.offsetWidth;
+            graphCanvas.height = graphCanvas.offsetHeight;
+            const G_W = graphCanvas.width;
+            const G_H = graphCanvas.height;
+            const PADDING_L = 60;
+            const PADDING_B = 40;
+            const PADDING_T = 20;
+            const PADDING_R = 20; 
+
+            graphCtx.clearRect(0, 0, G_W, G_H);
+            
+            // Determine which data series to plot
+            let data, label, color, units;
+            
+            if (type === 'VR' || type === 'VC' || type === 'VL') {
+                units = 'V';
+                color = COLORS.V;
+                if (type === 'VR') { data = VR; label = 'Resistor Voltage ($V_R$)'; }
+                if (type === 'VC') { data = VC; label = 'Capacitor Voltage ($V_C$)'; }
+                if (type === 'VL') { data = VL; label = 'Inductor Voltage ($V_L$)'; }
+            } else { // Current graphs (IR, IC, IL are all I)
+                units = 'A';
+                color = COLORS.I;
+                if (type === 'IR') { data = I; label = 'Resistor Current ($I_R$)'; }
+                if (type === 'IC') { data = I; label = 'Capacitor Current ($I_C$)'; }
+                if (type === 'IL') { data = I; label = 'Inductor Current ($I_L$)'; }
+            }
+            
+            // Calculate scale
+            const validData = data.filter(v => !isNaN(v) && isFinite(v)); // Ensure data is valid
+
+            let maxVal = validData.length > 0 ? Math.max(0, ...validData) * 1.1 : 1; 
+            let minVal = validData.length > 0 ? Math.min(0, ...validData) * 1.1 : -1;
+            
+            if (maxVal === 0 && minVal === 0) { // Handle case where data is all zero
+                 maxVal = 1; minVal = -1;
+            }
+            
+            const range = maxVal - minVal;
+            const maxTime = time[time.length - 1];
+
+            const plotW = G_W - PADDING_L - PADDING_R;
+            const plotH = G_H - PADDING_T - PADDING_B;
+            
+            // Y-axis 0 position (adjusted for negative values)
+            const SCALE_FACTOR = plotH / range;
+            const Y_ZERO = G_H - PADDING_B - (0 - minVal) * SCALE_FACTOR; 
+            
+            // --- Axes and Grid ---
+            graphCtx.strokeStyle = '#374151';
+            graphCtx.lineWidth = 1;
+
+            // X-axis (Time) - Draw at the calculated Y_ZERO line
+            graphCtx.beginPath();
+            graphCtx.moveTo(PADDING_L, Y_ZERO);
+            graphCtx.lineTo(G_W - PADDING_R, Y_ZERO);
+            graphCtx.stroke();
+            graphCtx.textAlign = 'right';
+            graphCtx.fillStyle = '#374151';
+            graphCtx.fillText('Time (s)', G_W - PADDING_R, G_H - PADDING_B + 30);
+
+            // Y-axis (Value)
+            graphCtx.beginPath();
+            graphCtx.moveTo(PADDING_L, PADDING_T);
+            graphCtx.lineTo(PADDING_L, G_H - PADDING_B);
+            graphCtx.stroke();
+            graphCtx.textAlign = 'center';
+            graphCtx.fillStyle = color;
+            graphCtx.fillText(`${units}`, PADDING_L / 2, PADDING_T);
+            
+            // Title
+            graphCtx.font = '16px Inter';
+            graphCtx.textAlign = 'center';
+            graphCtx.fillStyle = '#1e40af';
+            graphCtx.fillText(`${label} vs. Time`, G_W / 2, PADDING_T);
+
+
+            // Draw Ticks and Grid
+            graphCtx.font = '10px Inter';
+            for (let i = 0; i <= 5; i++) {
+                // Y-axis Ticks
+                const tickValue = minVal + (range * i / 5);
+                const y = G_H - PADDING_B - ((tickValue - minVal) * SCALE_FACTOR);
+                
+                // Horizontal Grid lines 
+                if(y < G_H - PADDING_B && y > PADDING_T) {
+                    graphCtx.strokeStyle = '#e5e7eb';
+                    graphCtx.beginPath();
+                    graphCtx.moveTo(PADDING_L, y);
+                    graphCtx.lineTo(G_W - PADDING_R, y);
+                    graphCtx.stroke();
+                }
+
+                graphCtx.textAlign = 'right';
+                graphCtx.fillStyle = color;
+                graphCtx.fillText(tickValue.toFixed(3) + units, PADDING_L - 5, y + 3);
+            }
+            
+            // Time Ticks
+             for (let i = 0; i <= 5; i++) {
+                const x = PADDING_L + (i * plotW / 5);
+                const tTickValue = (maxTime * i / 5).toPrecision(3);
+                graphCtx.textAlign = 'center';
+                graphCtx.fillStyle = '#374151';
+                graphCtx.fillText(tTickValue, x, G_H - PADDING_B + 15);
+            }
+
+            // --- Data Plotting ---
+            
+            graphCtx.strokeStyle = color;
+            graphCtx.lineWidth = 3;
+            graphCtx.beginPath();
+            
+            data.forEach((value, i) => {
+                // Skip NaN values during plotting
+                if (isNaN(value) || !isFinite(value)) return;
+                
+                const x = PADDING_L + (time[i] / maxTime) * plotW;
+                const y = G_H - PADDING_B - ((value - minVal) * SCALE_FACTOR);
+
+                if (i === 0) {
+                    graphCtx.moveTo(x, y);
+                } else {
+                    graphCtx.lineTo(x, y);
+                }
+            });
+            graphCtx.stroke();
+        }
+    </script>
+    <!-- MathJax for rendering LaTeX equations -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</body>
+</html>
